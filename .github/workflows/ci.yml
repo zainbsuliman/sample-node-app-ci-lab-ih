@@ -15,10 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
 
-    strategy:
-      matrix:
-        node-version: [22.x]
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -26,7 +22,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 22.x
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -44,36 +40,6 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Create deployment package
-        run: |
-          set -euo pipefail
-          STAGING="$GITHUB_WORKSPACE/deployment-package"
-          rm -rf "$STAGING"
-          mkdir -p "$STAGING"
-
-          [ -d public ] && cp -r public "$STAGING/" || echo "No public/ directory found"
-          [ -d node_modules ] && cp -r node_modules "$STAGING/" || echo "No node_modules/ directory found"
-          [ -f server.js ] && cp server.js "$STAGING/" || echo "No server.js found"
-          cp package.json "$STAGING/"
-          cp package-lock.json "$STAGING/"
-          [ -f README.md ] && cp README.md "$STAGING/" || true
-          [ -f Dockerfile ] && cp Dockerfile "$STAGING/" || echo "No Dockerfile found"
-
-          (cd "$STAGING" && npm pkg delete devDependencies || true)
-
-          TS="$(date +%Y%m%d-%H%M%S)"
-          SHORT_SHA="${GITHUB_SHA::7}"
-          ZIP_NAME="deployment-package-${SHORT_SHA}-${TS}.zip"
-          (cd "$GITHUB_WORKSPACE" && zip -r "$ZIP_NAME" "deployment-package")
-          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
-
-      - name: Upload deployment package artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: deployment-package-node-${{ matrix.node-version }}-${{ github.run_number }}
-          path: ${{ env.ZIP_NAME }}
-          retention-days: 90
-
       - name: Build, push image to Docker Hub and deploy to ACA
         uses: azure/container-apps-deploy-action@v2
         with:
@@ -82,7 +48,11 @@ jobs:
           registryUrl: docker.io
           registryUsername: ${{ secrets.DOCKERHUB_USERNAME }}
           registryPassword: ${{ secrets.DOCKERHUB_TOKEN }}
+
+          # Azure targets
           resourceGroup: container-labs-rg
           containerAppName: frontendapp
+
+          # Image tag = commit SHA for traceability
           imageToBuild: ${{ secrets.DOCKERHUB_USERNAME }}/frontendapp-node:${{ github.sha }}
 
