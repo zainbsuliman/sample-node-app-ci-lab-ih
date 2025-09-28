@@ -35,18 +35,24 @@ jobs:
     - name: Build the application (optional)
       run: npm run build 2>/dev/null || echo "No build step; continuing."
       
-    # Debug step to check secret (remove after testing)
-    - name: Debug Secret Length
-      run: |
-        echo "Secret length: $(echo '${{ secrets.AZURE_CREDENTIALS }}' | wc -c)"
-        
-    # Option 1: Using Service Principal with Secret (Current Method)
-    - name: Azure Login (Service Principal)
+    # Try different approaches for Azure Login
+    
+    # Method 1: Individual secrets (try this first)
+    - name: Azure Login (Individual Secrets)
       uses: azure/login@v2
       with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         
-    # Option 2: Using OIDC (Alternative - comment out Option 1 if using this)
+    # Method 2: Using AZURE_CREDENTIALS (comment out Method 1 if using this)
+    # - name: Azure Login (Service Principal)
+    #   uses: azure/login@v2
+    #   with:
+    #     creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    # Method 3: OIDC (comment out others if using this)
     # - name: Azure Login (OIDC)
     #   uses: azure/login@v2
     #   with:
