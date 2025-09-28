@@ -14,61 +14,80 @@ jobs:
   build-test-and-deploy:
     runs-on: ubuntu-latest
     environment: dev
-
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.x
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run unit tests (if present)
-        run: npm test --if-present
-
-      - name: Build the application (optional)
-        run: npm run build 2>/dev/null || echo "No build step; continuing."
-
-      - name: Azure Login (Service Principal)
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Create Resource Group
-        run: |
-          RG=container-labs-rg-zainab
-          LOC=westeurope
-          az group create -n $RG -l $LOC
-
-      - name: Create Container Apps Environment
-        run: |
-          ENV_NAME=aca-env
-          RG=container-labs-rg-zainab
-          LOC=westeurope
-          az containerapp env create -g $RG -n $ENV_NAME -l $LOC
-
-      - name: Build, push image to Docker Hub and deploy to ACA
-        uses: azure/container-apps-deploy-action@v2
-        with:
-          appSourcePath: ${{ github.workspace }}
-          # dockerfilePath: ./Dockerfile   # Uncomment if Dockerfile is not at root
-
-          registryUrl: docker.io
-          registryUsername: ${{ secrets.DOCKERHUB_USERNAME }}
-          registryPassword: ${{ secrets.DOCKERHUB_TOKEN }}
-
-          # Azure targets
-          resourceGroup: container-labs-rg-zainab
-          containerAppName: frontendapp
-          environment: aca-env
-          location: westeurope
-
-          # Image tag = commit SHA for traceability
-          imageToBuild: ${{ secrets.DOCKERHUB_USERNAME }}/frontendapp-node:${{ github.sha }}
-
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22.x
+        cache: npm
+        cache-dependency-path: package-lock.json
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run unit tests (if present)
+      run: npm test --if-present
+      
+    - name: Build the application (optional)
+      run: npm run build 2>/dev/null || echo "No build step; continuing."
+      
+    # Debug step to check secret (remove after testing)
+    - name: Debug Secret Length
+      run: |
+        echo "Secret length: $(echo '${{ secrets.AZURE_CREDENTIALS }}' | wc -c)"
+        
+    # Option 1: Using Service Principal with Secret (Current Method)
+    - name: Azure Login (Service Principal)
+      uses: azure/login@v2
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    # Option 2: Using OIDC (Alternative - comment out Option 1 if using this)
+    # - name: Azure Login (OIDC)
+    #   uses: azure/login@v2
+    #   with:
+    #     client-id: 496d8d43-ef6f-4e95-afda-2b92076e934f
+    #     tenant-id: 84f58ce9-43c8-4932-b908-591a8a3007d3
+    #     subscription-id: 80646857-9142-494b-90c5-32fea6acbc41
+        
+    - name: Test Azure Connection
+      run: |
+        az account show
+        az group list --output table
+        
+    - name: Create Resource Group
+      run: |
+        RG=container-labs-rg-zainab-$(date +%s)
+        LOC=westeurope
+        echo "Creating resource group: $RG"
+        az group create -n $RG -l $LOC
+        echo "RG_NAME=$RG" >> $GITHUB_ENV
+        
+    - name: Create Container Apps Environment
+      run: |
+        ENV_NAME=aca-env-$(date +%s)
+        RG=${{ env.RG_NAME }}
+        LOC=westeurope
+        echo "Creating environment: $ENV_NAME in $RG"
+        az containerapp env create -g $RG -n $ENV_NAME -l $LOC
+        echo "ENV_NAME=$ENV_NAME" >> $GITHUB_ENV
+        
+    - name: Build, push image to Docker Hub and deploy to ACA
+      uses: azure/container-apps-deploy-action@v2
+      with:
+        appSourcePath: ${{ github.workspace }}
+        # dockerfilePath: ./Dockerfile  # Uncomment if Dockerfile is not at root
+        registryUrl: docker.io
+        registryUsername: ${{ secrets.DOCKERHUB_USERNAME }}
+        registryPassword: ${{ secrets.DOCKERHUB_TOKEN }}
+        # Azure targets
+        resourceGroup: ${{ env.RG_NAME }}
+        containerAppName: frontendapp-zainab
+        environment: ${{ env.ENV_NAME }}
+        location: westeurope
+        # Image tag = commit SHA for traceability
+        imageToBuild: ${{ secrets.DOCKERHUB_USERNAME }}/frontendapp-node:${{ github.sha }}
