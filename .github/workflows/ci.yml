@@ -14,57 +14,49 @@ jobs:
   build-test-and-deploy:
     runs-on: ubuntu-latest
     environment: dev
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: 22.x
-        cache: npm
-        cache-dependency-path: package-lock.json
-        
-    - name: Install dependencies
-      run: npm ci
-      
-    - name: Run unit tests (if present)
-      run: npm test --if-present
-      
-    - name: Build the application (optional)
-      run: npm run build 2>/dev/null || echo "No build step; continuing."
-      
-    - name: Azure Login (Service Principal)
-      uses: azure/login@v2
-      with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
-        
-    - name: Create Resource Group
-      run: |
-        RG=container-labs-rg-zainab
-        LOC=westeurope
-        az group create -n $RG -l $LOC
-        
-    - name: Create Container Apps Environment
-      run: |
-        ENV_NAME=aca-env
-        RG=container-labs-rg-zainab
-        LOC=westeurope
-        az containerapp env create -g $RG -n $ENV_NAME -l $LOC
-        
-    - name: Build, push image to Docker Hub and deploy to ACA
-      uses: azure/container-apps-deploy-action@v2
-      with:
-        appSourcePath: ${{ github.workspace }}
-        # dockerfilePath: ./Dockerfile  # Uncomment if Dockerfile is not at root
-        registryUrl: docker.io
-        registryUsername: ${{ secrets.DOCKERHUB_USERNAME }}
-        registryPassword: ${{ secrets.DOCKERHUB_TOKEN }}
-        # Azure targets
-        resourceGroup: container-labs-rg-zainab
-        containerAppName: frontendapp
-        environment: aca-env
-        location: westeurope
-        # Image tag = commit SHA for traceability
-        imageToBuild: ${{ secrets.DOCKERHUB_USERNAME }}/frontendapp-node:${{ github.sha }}
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests (if present)
+        run: npm test --if-present
+
+      - name: Build the application (optional)
+        run: npm run build 2>/dev/null || echo "No build step; continuing."
+
+      - name: Azure Login (Service Principal)
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Build, push image to Docker Hub and deploy to ACA
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          appSourcePath: ${{ github.workspace }}
+          # dockerfilePath: ./Dockerfile   # Uncomment if Dockerfile is not at root
+          # target: <multi-stage-target-name-if-any>
+
+          registryUrl: docker.io
+          registryUsername: ${{ secrets.DOCKERHUB_USERNAME }}
+          registryPassword: ${{ secrets.DOCKERHUB_TOKEN }}
+
+          # Azure targets
+          resourceGroup: container-labs-rg-zainab
+          containerAppName: frontendapp
+          environment: aca-env
+          location: westeurope
+
+          # Image tag = commit SHA for traceability
+          imageToBuild: ${{ secrets.DOCKERHUB_USERNAME }}/frontendapp-node:${{ github.sha }}
+
