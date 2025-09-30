@@ -1,7 +1,6 @@
-name: Build, Test, and Deploy to Azure Container Apps
+name: Build, Test, and Deploy to Azure Web App (Container)
 
 on:
-  # Manual trigger from the Actions tab
   workflow_dispatch:
 
 permissions:
@@ -9,13 +8,19 @@ permissions:
   actions: read
   checks: write
   pull-requests: write
-  # If you plan to switch to OIDC later, keep id-token: write
   id-token: write
+
+env:
+  APP_PORT: 3000
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/zainab-frontendapp-node
+  AZURE_RESOURCE_GROUP: zainab-webz-labs-rg
+  AZURE_WEBAPP_NAME: zainab-frontendapp-web
 
 jobs:
   build-test-and-deploy:
     runs-on: ubuntu-latest
     environment: dev
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,7 +38,7 @@ jobs:
       - name: Run unit tests (if present)
         run: npm test --if-present
 
-      - name: Build the application (optional)
+      - name: Build (optional)
         run: npm run build 2>/dev/null || echo "No build step; continuing."
 
       - name: Azure Login (Service Principal)
@@ -41,18 +46,35 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Build, push image to Docker Hub and deploy to ACA
-        uses: azure/container-apps-deploy-action@v2
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
         with:
-          appSourcePath: ${{ github.workspace }}
-          # Uncomment if your Dockerfile isn't at repo root
-          # dockerfilePath: ./Dockerfile
-          # target: <multi-stage-target-name-if-any>
-          registryUrl: docker.io
-          registryUsername: ${{ secrets.DOCKERHUB_USERNAME }}
-          registryPassword: ${{ secrets.DOCKERHUB_TOKEN }}
-          # Azure targets
-          resourceGroup: container-labs-rg
-          containerAppName: frontendapp
-          # Image tag = commit SHA for traceability
-          imageToBuild: ${{ secrets.DOCKERHUB_USERNAME }}/frontendapp-node:${{ github.sha }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image to Docker Hub
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+
+      - name: Configure Web App to use the new image
+        run: |
+          az webapp config appsettings set \
+            -g "${{ env.AZURE_RESOURCE_GROUP }}" \
+            -n "${{ env.AZURE_WEBAPP_NAME }}" \
+            --settings WEBSITES_PORT=${{ env.APP_PORT }} \
+                       DOCKER_REGISTRY_SERVER_URL=https://index.docker.io
+
+          az webapp config container set \
+            -g "${{ env.AZURE_RESOURCE_GROUP }}" \
+            -n "${{ env.AZURE_WEBAPP_NAME }}" \
+            --container-image-name "${{ env.IMAGE_NAME }}:${{ github.sha }}" \
+            --container-registry-url "https://index.docker.io"
+
+          az webapp restart -g "${{ env.AZURE_RESOURCE_GROUP }}" -n "${{ env.AZURE_WEBAPP_NAME }}"
+
