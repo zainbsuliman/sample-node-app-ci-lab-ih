@@ -10,7 +10,7 @@ permissions:
 env:
   APP_PORT: 3000
   APP_NAME: zainab-frontendapp
-  VM_USER: azureuser  # عدلي إذا اسم المستخدم في VM مختلف
+  VM_USER: azureuser       # اسم المستخدم في VM
   VM_PATH: /opt/zainab-frontendapp
   NODE_VERSION: 22
 
@@ -68,8 +68,8 @@ jobs:
       - name: Deploy to VM using Run Command
         run: |
           az vm run-command invoke \
-            -g ${{ secrets.AZURE_RESOURCE_GROUP }} \
-            -n ${{ secrets.AZURE_VM_NAME }} \
+            -g myResourceGroupz \
+            -n myNodeVM \
             --command-id RunShellScript \
             --scripts "
             mkdir -p $VM_PATH/releases &&
@@ -82,6 +82,7 @@ jobs:
             curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - &&
             sudo apt-get install -y nodejs unzip pm2 &&
             npm ci --omit=dev &&
-            pm2 startOrRestart ecosystem.config.js --name $APP_NAME
+            pm2 start server.js --name $APP_NAME &&
+            pm2 save
             "
 
